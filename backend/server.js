@@ -7,11 +7,17 @@ import { createServer } from "node:http";
 const PORT = Number(process.env.PORT) || 8787;
 const LABD_URL = "https://agent.thedevlabs.io/v1/api/chat";
 const API_KEY = process.env.LABD_API_KEY;
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "http://localhost:5173";
+// Comma-separated list of allowed frontend origins, e.g.
+// ALLOWED_ORIGIN=https://my-app.vercel.app,http://localhost:5173
+// Trailing slashes are ignored. Use "*" to allow any origin.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
 const MAX_BODY_BYTES = 200_000; // about 200 KB, enough for a resume and a job post
 
 if (!API_KEY) {
-  console.error("LABD_API_KEY is not set. Add it to backend/.env and start with `npm start`.");
+  console.error("LABD_API_KEY is not set. Set it in your host's environment variables (or backend/.env locally).");
   process.exit(1);
 }
 
@@ -24,13 +30,17 @@ const LABD_ERRORS = {
 };
 
 function send(res, status, body) {
-  res.writeHead(status, {
+  const origin = res.req?.headers.origin;
+  const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
-  });
-  res.end(JSON.stringify(body));
+    Vary: "Origin",
+  };
+  if (ALLOWED_ORIGINS.includes("*")) headers["Access-Control-Allow-Origin"] = "*";
+  else if (origin && ALLOWED_ORIGINS.includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  res.writeHead(status, headers);
+  res.end(status === 204 ? undefined : JSON.stringify(body));
 }
 
 // Reads the request body, refusing anything too large.
@@ -116,6 +126,9 @@ async function handleFeedback(req, res) {
 }
 
 const server = createServer(async (req, res) => {
+  if (req.method === "GET" && (req.url === "/" || req.url === "/health")) {
+    return send(res, 200, { ok: true });
+  }
   if (req.method === "OPTIONS") {
     return send(res, 204, {});
   }
@@ -129,7 +142,8 @@ const server = createServer(async (req, res) => {
   return send(res, 404, { error: "Not found." });
 });
 
-server.listen(PORT, () => {
-  console.log(`labd proxy listening on http://localhost:${PORT}`);
-  console.log(`Accepting requests from ${ALLOWED_ORIGIN}`);
+// Bind to 0.0.0.0 so Render/Railway/etc. can reach the server.
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`labd proxy listening on port ${PORT}`);
+  console.log(`Accepting requests from ${ALLOWED_ORIGINS.join(", ")}`);
 });
