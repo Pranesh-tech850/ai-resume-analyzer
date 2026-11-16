@@ -1,0 +1,13 @@
+{
+  "name": "resume-parser-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Server-side proxy to the labd API. Keeps LABD_API_KEY off the browser.",
+  "scripts": {
+    "start": "node --env-file=.env server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

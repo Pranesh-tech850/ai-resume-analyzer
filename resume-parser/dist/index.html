@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResumeParser: match your resume to a job</title>
+
+  <!-- Colour tokens. The palette switches by toggling the "dark" class on <html>. -->
+  <style>
+    :root {
+      --page: #fdf6e9;        /* cream background */
+      --panel: #fffaf1;       /* lighter cream cards */
+      --ink: #1f1a14;         /* near-black text */
+      --muted: #6b5d4d;
+      --line: #e6d6b8;
+      --track: #efe3cc;
+      --accent: #ea580c;      /* orange */
+      --accent-hover: #c2410c;
+      --accent-soft: #fdebd6;
+      --on-accent: #ffffff;
+    }
+    html.dark {
+      --page: #0b0a08;        /* black background */
+      --panel: #15120e;
+      --ink: #f5ead6;         /* cream text */
+      --muted: #a89a84;
+      --line: #2e261d;
+      --track: #2a231a;
+      --accent: #fb923c;
+      --accent-hover: #fdba74;
+      --accent-soft: #2a1a0c;
+      --on-accent: #1a0f05;
+    }
+    body { transition: background-color 0.3s ease, color 0.3s ease; }
+  </style>
+
+  <!-- Runs before the page paints, so a dark-mode visitor never sees a flash of cream. -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("resume-parser-theme");
+        var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    })();
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind Play CDN config. Colours point at the CSS variables above.
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            page: "var(--page)",
+            panel: "var(--panel)",
+            ink: "var(--ink)",
+            muted: "var(--muted)",
+            line: "var(--line)",
+            track: "var(--track)",
+            accent: "var(--accent)",
+            "accent-hover": "var(--accent-hover)",
+            "accent-soft": "var(--accent-soft)",
+            "on-accent": "var(--on-accent)",
+          },
+          keyframes: {
+            fadeUp: {
+              from: { opacity: "0", transform: "translateY(12px)" },
+              to: { opacity: "1", transform: "translateY(0)" },
+            },
+          },
+          animation: { "fade-up": "fadeUp 0.45s ease-out both" },
+        },
+      },
+    };
+  </script>
+
+  <!-- PDF and Word readers, loaded as globals (window.pdfjsLib, window.mammoth) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script type="module" crossorigin src="/assets/index-BkxCUBCJ.js"></script>
+</head>
+<body class="min-h-screen bg-page text-ink antialiased">
+  <div id="root"></div>
+</body>
+</html>
