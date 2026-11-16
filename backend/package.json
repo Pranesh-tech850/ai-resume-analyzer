@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Server-side proxy to the labd API. Keeps LABD_API_KEY off the browser.",
   "scripts": {
-    "start": "node --env-file=.env server.js"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=22"
