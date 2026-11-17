@@ -1,19 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "./components/layout/Header.jsx";
 import Footer from "./components/layout/Footer.jsx";
 import Hero from "./components/Hero.jsx";
 import ResumeUploader from "./components/ResumeUploader.jsx";
 import JobDescriptionInput from "./components/JobDescriptionInput.jsx";
 import ScoreCard from "./components/scorecard/ScoreCard.jsx";
+import History from "./components/history/History.jsx";
 import Button from "./components/ui/Button.jsx";
 import ErrorMessage from "./components/ui/ErrorMessage.jsx";
 import { useFileUpload } from "./hooks/useFileUpload.js";
 import { useAnalysis } from "./hooks/useAnalysis.js";
+import { saveAnalysis } from "./lib/saveAnalysis.js";
 
 export default function App() {
   const upload = useFileUpload();
   const analysis = useAnalysis();
   const [jobDescription, setJobDescription] = useState("");
+
+  // Each new result is saved once, when it appears.
+  useEffect(() => {
+    if (analysis.result) saveAnalysis(analysis.result);
+  }, [analysis.result]);
 
   const canAnalyze = upload.status === "ready" && jobDescription.trim().length > 0;
   const error = upload.error || analysis.error;
@@ -52,6 +59,10 @@ export default function App() {
             jobDescription={jobDescription}
           />
         )}
+
+        <section className="mx-auto max-w-6xl px-6 pb-16">
+          <History />
+        </section>
       </main>
 
       <Footer />
