@@ -1,7 +1,7 @@
 
 import { createServer } from "node:http";
 import { connectDb, getDb } from "./db.js";
-import { sanitizeAnalysis, saveAnalysis } from "./analysisStore.js";
+import { listAnalyses, sanitizeAnalysis, saveAnalysis } from "./analysisStore.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 
@@ -228,6 +228,21 @@ const server = createServer(async (req, res) => {
       return send(res, 500, {
         error: "Unexpected server error.",
       }, origin);
+    }
+  }
+
+  // List saved results, newest first
+  if (req.method === "GET" && req.url === "/api/analyses") {
+    try {
+      const db = getDb();
+      if (!db) {
+        return send(res, 503, { error: "Saving is not set up on this server." }, origin);
+      }
+      const items = await listAnalyses(db);
+      return send(res, 200, { items }, origin);
+    } catch (err) {
+      console.error("List analyses error:", err);
+      return send(res, 500, { error: "Could not load the history." }, origin);
     }
   }
 

@@ -60,3 +60,32 @@ export async function saveAnalysis(db, doc) {
   const { insertedId } = await db.collection("analyses").insertOne(doc);
   return insertedId;
 }
+
+// Newest first. Only the fields the history view needs are returned.
+export async function listAnalyses(db, limit = 20) {
+  const docs = await db
+    .collection("analyses")
+    .find({}, {
+      projection: {
+        score: 1,
+        verdict: 1,
+        createdAt: 1,
+        skillsMatched: 1,
+        skillsMissing: 1,
+        suggestions: 1,
+      },
+    })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  return docs.map((d) => ({
+    id: String(d._id),
+    score: d.score,
+    verdict: d.verdict,
+    createdAt: d.createdAt,
+    skillsMatched: d.skillsMatched ?? [],
+    skillsMissing: d.skillsMissing ?? [],
+    suggestions: d.suggestions ?? [],
+  }));
+}
