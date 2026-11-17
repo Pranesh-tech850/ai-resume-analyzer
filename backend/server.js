@@ -1,5 +1,7 @@
 
 import { createServer } from "node:http";
+import { connectDb, getDb } from "./db.js";
+import { sanitizeAnalysis, saveAnalysis } from "./analysisStore.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 
@@ -229,13 +231,47 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // Save a scorecard result
+  if (req.method === "POST" && req.url === "/api/analyses") {
+    try {
+      const db = getDb();
+      if (!db) {
+        return send(res, 503, { error: "Saving is not set up on this server." }, origin);
+      }
+
+      const body = await readJson(req).catch((err) => {
+        throw Object.assign(err, { status: err.status || 400 });
+      });
+
+      const doc = sanitizeAnalysis(body);
+      if (!doc) {
+        return send(res, 400, { error: "A valid score is required." }, origin);
+      }
+
+      const id = await saveAnalysis(db, doc);
+      return send(res, 201, { id: String(id) }, origin);
+    } catch (err) {
+      console.error("Save analysis error:", err);
+      return send(res, err.status || 500, {
+        error: err.status ? err.message : "Could not save the analysis.",
+      }, origin);
+    }
+  }
+
   // Unknown endpoint
   return send(res, 404, {
     error: "Not found.",
   }, origin);
 });
 
-// Start server
+// Start server. The database connects first, but a failed connection doesn't stop
+// the feedback endpoint from working.
+try {
+  await connectDb();
+} catch (err) {
+  console.error("MongoDB connection failed. Analyses will not be saved:", err.message);
+}
+
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Resume Parser backend running on port ${PORT}`);
   console.log("Allowed frontend origins:", ALLOWED_ORIGINS);
