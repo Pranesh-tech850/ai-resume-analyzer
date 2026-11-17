@@ -17,11 +17,11 @@ export default function StintTimeline({ stints }) {
 
   return (
     <ul className="mt-4 space-y-2 text-sm">
-      {stints.map((s) => {
+      {stints.map((s, i) => {
         const tag = TAGS[s.tag];
         return (
           <li
-            key={s.label}
+            key={`${s.label}-${i}`}
             className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-page px-4 py-2"
           >
             <span className="font-medium text-ink">{s.label}</span>
