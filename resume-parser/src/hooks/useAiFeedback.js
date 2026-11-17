@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 
-// The proxy in backend/server.js, deployed on Render. To use a local proxy instead,
-// set VITE_FEEDBACK_URL=http://localhost:3001/api/feedback in resume-parser/.env.local.
+// The proxy in backend/server.js. Locally it listens on http://localhost:8787 by default.
+// To point at another address, set VITE_FEEDBACK_URL in resume-parser/.env.local.
 const FEEDBACK_URL =
-  import.meta.env.VITE_FEEDBACK_URL || "https://ai-resume-analyzer-2-9j4v.onrender.com/api/feedback";
+  import.meta.env.VITE_FEEDBACK_URL || "http://localhost:3001/api/feedback";
 
 // Calls the backend proxy and keeps the reply, the remaining allowance, or an error.
 export function useAiFeedback() {
