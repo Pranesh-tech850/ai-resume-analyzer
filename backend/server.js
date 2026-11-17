@@ -1,74 +1,96 @@
-// A small proxy between the ResumeParser page and the labd API.
-// The API key lives here, on the server, and never reaches the browser.
-// Uses only Node's built-in modules and fetch (Node 22+), so there is nothing to install.
 
 import { createServer } from "node:http";
 
 const PORT = Number(process.env.PORT) || 8787;
+
 const LABD_URL = "https://agent.thedevlabs.io/v1/api/chat";
 const API_KEY = process.env.LABD_API_KEY;
-// Comma-separated list of allowed frontend origins, e.g.
-// ALLOWED_ORIGIN=https://my-app.vercel.app,http://localhost:5173
-// Trailing slashes are ignored. Use "*" to allow any origin.
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGIN || "http://localhost:5173")
-  .split(",")
-  .map((o) => o.trim().replace(/\/+$/, ""))
-  .filter(Boolean);
-const MAX_BODY_BYTES = 200_000; // about 200 KB, enough for a resume and a job post
 
+const FRONTEND_URL = "https://ai-resume-analyzer-5-7e2t.onrender.com";
+
+const ALLOWED_ORIGINS = (
+  process.env.ALLOWED_ORIGIN ||
+  `${FRONTEND_URL},http://localhost:5173`
+)
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+const MAX_BODY_BYTES = 200_000;
+
+// Ensure the API key exists
 if (!API_KEY) {
-  console.error("LABD_API_KEY is not set. Set it in your host's environment variables (or backend/.env locally).");
+  console.error("LABD_API_KEY is missing.");
   process.exit(1);
 }
 
-// Turns labd's status codes into messages a learner can act on.
-const LABD_ERRORS = {
-  401: "The labd key is wrong or has been revoked.",
-  402: "The labd allowance for this month is used up.",
-  403: "The labd API is switched off for now.",
-  429: "Too many requests this minute. Try again shortly.",
-};
-
-function send(res, status, body) {
-  const origin = res.req?.headers.origin;
+// Send JSON response with CORS headers
+function send(res, status, body, origin) {
   const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
     "Access-Control-Allow-Headers": "Content-Type",
-    Vary: "Origin",
+    "Vary": "Origin",
   };
-  if (ALLOWED_ORIGINS.includes("*")) headers["Access-Control-Allow-Origin"] = "*";
-  else if (origin && ALLOWED_ORIGINS.includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
+
+  if (ALLOWED_ORIGINS.includes("*")) {
+    headers["Access-Control-Allow-Origin"] = "*";
+  } else if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+
   res.writeHead(status, headers);
-  res.end(status === 204 ? undefined : JSON.stringify(body));
+
+  if (status === 204) {
+    return res.end();
+  }
+
+  res.end(JSON.stringify(body));
 }
 
-// Reads the request body, refusing anything too large.
+// Read incoming JSON request
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
+
     req.on("data", (chunk) => {
       size += chunk.length;
+
       if (size > MAX_BODY_BYTES) {
-        reject(Object.assign(new Error("Request body too large."), { status: 413 }));
+        reject(
+          Object.assign(
+            new Error("Request body too large."),
+            { status: 413 }
+          )
+        );
+
         req.destroy();
         return;
       }
+
       chunks.push(chunk);
     });
+
     req.on("end", () => {
       try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+        const body = Buffer.concat(chunks).toString("utf8");
+        resolve(JSON.parse(body || "{}"));
       } catch {
-        reject(Object.assign(new Error("Body must be valid JSON."), { status: 400 }));
+        reject(
+          Object.assign(
+            new Error("Body must be valid JSON."),
+            { status: 400 }
+          )
+        );
       }
     });
+
     req.on("error", reject);
   });
 }
 
-// Builds the prompt. labd takes a list of messages, and the last one must be from the user.
+// Build LABD prompt
 function buildMessages({ resume, jobDescription }) {
   return [
     {
@@ -77,26 +99,42 @@ function buildMessages({ resume, jobDescription }) {
         "You are a career coach. Compare the resume with the job description. " +
         "Reply with three short paragraphs: what the resume does well for this role, " +
         "the biggest gaps, and one concrete change to make first.\n\n" +
-        `JOB DESCRIPTION:\n${jobDescription}\n\nRESUME:\n${resume}`,
+        `JOB DESCRIPTION:\n${jobDescription}\n\n` +
+        `RESUME:\n${resume}`,
     },
   ];
 }
 
-async function handleFeedback(req, res) {
+// Handle feedback request
+async function handleFeedback(req, res, origin) {
   let body;
+
   try {
     body = await readJson(req);
   } catch (err) {
-    return send(res, err.status || 400, { error: err.message });
+    return send(res, err.status || 400, {
+      error: err.message,
+    }, origin);
   }
 
-  const resume = typeof body.resume === "string" ? body.resume.trim() : "";
-  const jobDescription = typeof body.jobDescription === "string" ? body.jobDescription.trim() : "";
+  const resume =
+    typeof body.resume === "string"
+      ? body.resume.trim()
+      : "";
+
+  const jobDescription =
+    typeof body.jobDescription === "string"
+      ? body.jobDescription.trim()
+      : "";
+
   if (!resume || !jobDescription) {
-    return send(res, 400, { error: "Both resume and jobDescription are required." });
+    return send(res, 400, {
+      error: "Both resume and jobDescription are required.",
+    }, origin);
   }
 
   let upstream;
+
   try {
     upstream = await fetch(LABD_URL, {
       method: "POST",
@@ -104,46 +142,101 @@ async function handleFeedback(req, res) {
         Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ messages: buildMessages({ resume, jobDescription }) }),
+      body: JSON.stringify({
+        messages: buildMessages({
+          resume,
+          jobDescription,
+        }),
+      }),
     });
-  } catch {
-    return send(res, 502, { error: "Could not reach labd. Check the network and retry." });
+  } catch (err) {
+    console.error("LABD connection error:", err);
+
+    return send(res, 502, {
+      error: "Could not reach LABD. Check the network and retry.",
+    }, origin);
   }
 
   const data = await upstream.json().catch(() => ({}));
 
+  const LABD_ERRORS = {
+    401: "The LABD API key is incorrect or revoked.",
+    402: "The LABD API allowance has been exhausted.",
+    403: "The LABD API is currently disabled.",
+    429: "Too many requests. Please try again shortly.",
+  };
+
   if (!upstream.ok) {
+    console.error("LABD API error:", upstream.status, data);
+
     return send(res, upstream.status, {
-      error: LABD_ERRORS[upstream.status] || "labd returned an error.",
-    });
+      error:
+        LABD_ERRORS[upstream.status] ||
+        "LABD returned an error.",
+    }, origin);
   }
 
-  // Pass on only what the page needs, not the whole labd response.
   return send(res, 200, {
     reply: data.message?.content ?? "",
     percentLeft: data.credits?.percentLeft ?? null,
-  });
+  }, origin);
 }
 
+// Main HTTP server
 const server = createServer(async (req, res) => {
-  if (req.method === "GET" && (req.url === "/" || req.url === "/health")) {
-    return send(res, 200, { ok: true });
+  const origin = req.headers.origin;
+
+  // Reject requests from unapproved browser origins
+  if (
+    origin &&
+    !ALLOWED_ORIGINS.includes("*") &&
+    !ALLOWED_ORIGINS.includes(origin)
+  ) {
+    return send(res, 403, {
+      error: "Origin not allowed.",
+    }, origin);
   }
+
+  // CORS preflight
   if (req.method === "OPTIONS") {
-    return send(res, 204, {});
+    return send(res, 204, {}, origin);
   }
-  if (req.method === "POST" && req.url === "/api/feedback") {
+
+  // Health check
+  if (
+    req.method === "GET" &&
+    (req.url === "/" || req.url === "/health")
+  ) {
+    return send(res, 200, {
+      ok: true,
+      service: "resume-parser-backend",
+    }, origin);
+  }
+
+  // Feedback endpoint
+  if (
+    req.method === "POST" &&
+    req.url === "/api/feedback"
+  ) {
     try {
-      return await handleFeedback(req, res);
-    } catch {
-      return send(res, 500, { error: "Unexpected server error." });
+      return await handleFeedback(req, res, origin);
+    } catch (err) {
+      console.error("Unexpected feedback error:", err);
+
+      return send(res, 500, {
+        error: "Unexpected server error.",
+      }, origin);
     }
   }
-  return send(res, 404, { error: "Not found." });
+
+  // Unknown endpoint
+  return send(res, 404, {
+    error: "Not found.",
+  }, origin);
 });
 
-// Bind to 0.0.0.0 so Render/Railway/etc. can reach the server.
+// Start server
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`labd proxy listening on port ${PORT}`);
-  console.log(`Accepting requests from ${ALLOWED_ORIGINS.join(", ")}`);
+  console.log(`Resume Parser backend running on port ${PORT}`);
+  console.log("Allowed frontend origins:", ALLOWED_ORIGINS);
 });
